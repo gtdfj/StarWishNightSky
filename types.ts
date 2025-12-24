@@ -16,7 +16,9 @@ export interface Particle {
   friction: number;
   gravity: number;
   trail: Point[];
-  shape?: 'star' | 'circle' | 'heart' | 'gold-dust';
+  shape?: 'star' | 'circle' | 'heart';
+  wobbleSpeed?: number;
+  wobbleTheta?: number;
 }
 
 export interface FireworkProjectile {
@@ -36,15 +38,4 @@ export interface Blessing {
   opacity: number;
   y: number;
   id: number;
-  scale?: number;
-}
-
-export interface HolidayConfig {
-  id: string;
-  name: string;
-  match: (date: Date) => boolean;
-  themeColor: string;
-  specialColors: string[];
-  specialQuotes: string[];
-  firstLaunchEffect?: boolean;
 }
