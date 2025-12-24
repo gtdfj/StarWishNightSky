@@ -1,0 +1,67 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>星愿·夜穹</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@200;400&display=swap');
+        
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #020205;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Noto Serif SC', serif;
+        }
+
+        canvas {
+            display: block;
+            filter: contrast(1.1) saturate(1.1);
+        }
+
+        .font-poetic {
+            font-family: 'Ma Shan Zheng', cursive;
+        }
+
+        .font-serif-elegant {
+            font-family: 'Noto Serif SC', serif;
+            font-weight: 200;
+            letter-spacing: 0.2em;
+        }
+
+        /* Glassmorphism subtle effect */
+        .glass-ui {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(10px); }
+            15% { opacity: 1; transform: translateY(0); }
+            85% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-10px); }
+        }
+
+        .animate-poetic-entry {
+            animation: fadeInOut 5s ease-in-out forwards;
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>
