@@ -1,7 +1,8 @@
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 
-// --- Types ---
+// --- 类型定义 ---
 interface Point {
   x: number;
   y: number;
@@ -19,7 +20,6 @@ interface Particle {
   friction: number;
   gravity: number;
   trail: Point[];
-  shape?: 'star' | 'circle' | 'heart';
   behavior?: 'normal' | 'spark' | 'flash';
   wobbleSpeed?: number;
   wobbleTheta?: number;
@@ -44,7 +44,7 @@ interface Blessing {
   id: number;
 }
 
-// --- Constants ---
+// --- 常量配置 ---
 const QUOTES = [
   "醉后不知天在水，满船清梦压星河",
   "星河滚烫，你是人间理想",
@@ -73,26 +73,21 @@ const SUMI_COLORS = [
 ];
 
 const CONSTELLATIONS = [
-  {
-    name: "Big Dipper",
-    points: [[0,0], [1,0.2], [2,0.5], [3,0.3], [3.5,-0.2], [4.5,-0.5], [5,-1]]
-  },
-  {
-    name: "Cassiopeia",
-    points: [[0,0], [0.5,1], [1,0], [1.5,1], [2,0]]
-  }
+  { points: [[0,0], [1,0.2], [2,0.5], [3,0.3], [3.5,-0.2], [4.5,-0.5], [5,-1]] },
+  { points: [[0,0], [0.5,1], [1,0], [1.5,1], [2,0]] }
 ];
 
-// --- Audio Service ---
+// --- 音效服务 ---
 class AudioService {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
-  private comboCount: number = 0;
   private volume: number = 0.5;
 
   private init() {
     if (!this.ctx) {
-      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      this.ctx = new AudioCtx();
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
       this.masterGain.connect(this.ctx.destination);
@@ -116,20 +111,15 @@ class AudioService {
   playLaunch() {
     this.init();
     if (!this.ctx || !this.masterGain) return;
-    
     const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    
+    const g = this.ctx.createGain();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(400, this.ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.3);
-    
-    gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
-    
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    
+    g.gain.setValueAtTime(0.05, this.ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+    osc.connect(g);
+    g.connect(this.masterGain);
     osc.start();
     osc.stop(this.ctx.currentTime + 0.3);
   }
@@ -137,76 +127,35 @@ class AudioService {
   playPop(power: number) {
     this.init();
     if (!this.ctx || !this.masterGain) return;
-
-    const noise = this.ctx.createBufferSource();
-    const bufferSize = this.ctx.sampleRate * 0.5;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-    
-    noise.buffer = buffer;
-    
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(power > 1 ? 2000 : 800, this.ctx.currentTime);
-    
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.3 * (power/2), this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
-    
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.masterGain);
-    
-    noise.start();
-
-    if (Math.random() > 0.7) {
-      this.playChime();
-    }
-    
-    this.comboCount++;
-    if (this.comboCount % 10 === 0) {
-      this.playWhaleSong();
-    }
-  }
-
-  private playChime() {
-    if (!this.ctx || !this.masterGain) return;
+    const g = this.ctx.createGain();
     const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(880 + Math.random() * 440, this.ctx.currentTime);
-    gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 2);
-    osc.connect(gain);
-    gain.connect(this.masterGain);
+    osc.frequency.setValueAtTime(100 + Math.random() * 50, this.ctx.currentTime);
+    g.gain.setValueAtTime(0.1 * power, this.ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
+    osc.connect(g);
+    g.connect(this.masterGain);
     osc.start();
-    osc.stop(this.ctx.currentTime + 2);
-  }
-
-  private playWhaleSong() {
-    if (!this.ctx || !this.masterGain) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(150, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 4);
-    gain.gain.setValueAtTime(0, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.05, this.ctx.currentTime + 1);
-    gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 4);
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 4);
+    osc.stop(this.ctx.currentTime + 0.5);
+    
+    if (Math.random() > 0.5) {
+      const chime = this.ctx.createOscillator();
+      const cg = this.ctx.createGain();
+      chime.type = 'sine';
+      chime.frequency.setValueAtTime(800 + Math.random() * 1000, this.ctx.currentTime);
+      cg.gain.setValueAtTime(0.02, this.ctx.currentTime);
+      cg.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 1);
+      chime.connect(cg);
+      cg.connect(this.masterGain);
+      chime.start();
+      chime.stop(this.ctx.currentTime + 1);
+    }
   }
 }
 
 const audioService = new AudioService();
 
-// --- Main App Component ---
+// --- 主程序组件 ---
 const App: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [charging, setCharging] = useState(false);
@@ -221,8 +170,9 @@ const App: React.FC = () => {
   const particles = useRef<Particle[]>([]);
   const projectiles = useRef<FireworkProjectile[]>([]);
   const backgroundStars = useRef<{x: number, y: number, s: number, a: number, t: number, speed: number}[]>([]);
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number>(0);
 
+  // 初始化背景星星
   useEffect(() => {
     const stars = [];
     for (let i = 0; i < 200; i++) {
@@ -237,6 +187,16 @@ const App: React.FC = () => {
     }
     backgroundStars.current = stars;
   }, []);
+
+  // 重奏自动消失逻辑：3秒无操作则重置计数
+  useEffect(() => {
+    if (combo > 0) {
+      const timer = window.setTimeout(() => {
+        setCombo(0);
+      }, 3000);
+      return () => window.clearTimeout(timer);
+    }
+  }, [combo]);
 
   const createParticles = useCallback((x: number, y: number, color: string, power: number) => {
     const particlePool = isOffline ? SUMI_COLORS : COLORS;
@@ -254,10 +214,9 @@ const App: React.FC = () => {
     const count = Math.floor(power * 100 + 50);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const speedStr = (Math.random() * 0.5 + 0.5) * (isOffline ? 5 : 8) * power;
-      const speed = speedStr * (0.8 + Math.random() * 0.4);
+      const speed = (Math.random() * 0.5 + 0.5) * (isOffline ? 5 : 8) * power;
       
-      const p: Particle = {
+      particles.current.push({
         x, y,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
@@ -269,43 +228,20 @@ const App: React.FC = () => {
         gravity: isOffline ? 0.08 : 0.12,
         trail: [],
         behavior: 'normal'
-      };
-      particles.current.push(p);
+      });
     }
 
     if (!isOffline && power > 0.6) {
-      const sparkleCount = Math.floor(power * 60);
-      for (let i = 0; i < sparkleCount; i++) {
+      for (let i = 0; i < Math.floor(power * 40); i++) {
         const angle = Math.random() * Math.PI * 2;
         const speed = (Math.random() * 2 + 2) * power;
         particles.current.push({
-          x, y, 
-          vx: Math.cos(angle) * speed, 
-          vy: Math.sin(angle) * speed,
-          life: 1, maxLife: 1.5 + Math.random(), 
-          color: '#ffffff', 
-          size: 0.8 + Math.random() * 0.8,
-          friction: 0.96, gravity: 0.08, trail: [],
+          x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+          life: 1, maxLife: 1.5 + Math.random(), color: '#ffffff',
+          size: 0.8 + Math.random() * 0.8, friction: 0.96, gravity: 0.08, trail: [],
           behavior: 'spark'
         });
       }
-    }
-
-    if (Math.random() > 0.85 && !isOffline) {
-      const constellation = CONSTELLATIONS[Math.floor(Math.random() * CONSTELLATIONS.length)];
-      const scale = 30 * power;
-      const rotation = Math.random() * Math.PI * 2;
-      const cosR = Math.cos(rotation), sinR = Math.sin(rotation);
-
-      constellation.points.forEach(([px, py]) => {
-        particles.current.push({
-          x: x + (px * cosR - py * sinR) * scale,
-          y: y + (px * sinR + py * cosR) * scale,
-          vx: 0, vy: 0, life: 1, maxLife: 3.5, 
-          color: '#FFFFFF', size: 2.5, friction: 0.99, gravity: 0, trail: [],
-          behavior: 'normal'
-        });
-      });
     }
 
     const quote = QUOTES[Math.floor(Math.random() * QUOTES.length)];
@@ -345,10 +281,7 @@ const App: React.FC = () => {
       ctx.fillStyle = '#f5f0e6'; 
       ctx.fillRect(0, 0, width, height);
     } else {
-      const grad = ctx.createLinearGradient(0, 0, 0, height);
-      grad.addColorStop(0, '#020205'); 
-      grad.addColorStop(1, '#08081a');
-      ctx.fillStyle = grad;
+      ctx.fillStyle = '#020205';
       ctx.fillRect(0, 0, width, height);
 
       ctx.globalCompositeOperation = 'lighter';
@@ -363,11 +296,8 @@ const App: React.FC = () => {
       ctx.globalCompositeOperation = 'source-over';
     }
 
-    if (isOffline) {
-      ctx.globalCompositeOperation = 'multiply';
-    } else {
-      ctx.globalCompositeOperation = 'lighter';
-    }
+    if (isOffline) ctx.globalCompositeOperation = 'multiply';
+    else ctx.globalCompositeOperation = 'lighter';
 
     projectiles.current = projectiles.current.filter(p => p.active);
     projectiles.current.forEach(p => {
@@ -378,13 +308,9 @@ const App: React.FC = () => {
       ctx.beginPath();
       ctx.strokeStyle = p.color;
       ctx.lineWidth = isOffline ? 3 : 2;
-      ctx.lineCap = 'round';
-      
       if (p.trail.length > 0) {
         ctx.moveTo(p.trail[0].x, p.trail[0].y);
-        for (let i = 1; i < p.trail.length; i++) {
-            ctx.lineTo(p.trail[i].x, p.trail[i].y);
-        }
+        for (let i = 1; i < p.trail.length; i++) ctx.lineTo(p.trail[i].x, p.trail[i].y);
       }
       ctx.stroke();
 
@@ -396,16 +322,8 @@ const App: React.FC = () => {
 
     particles.current = particles.current.filter(p => p.life > 0);
     particles.current.forEach(p => {
-      p.vx *= p.friction; 
-      p.vy *= p.friction; 
-      p.vy += p.gravity;
-      
-      if (p.wobbleSpeed) {
-        p.wobbleTheta! += p.wobbleSpeed;
-        p.x += Math.sin(p.wobbleTheta!) * 0.3;
-      }
-      p.x += p.vx; 
-      p.y += p.vy;
+      p.vx *= p.friction; p.vy *= p.friction; p.vy += p.gravity;
+      p.x += p.vx; p.y += p.vy;
       p.life -= 1 / (60 * p.maxLife);
 
       if (p.life > 0) {
@@ -414,43 +332,20 @@ const App: React.FC = () => {
             grad.addColorStop(0, `rgba(255,255,255,${p.life})`);
             grad.addColorStop(1, 'rgba(255,255,255,0)');
             ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
             return;
         }
 
         ctx.fillStyle = p.color;
-        let alpha = p.life;
-        if (!isOffline) {
-             alpha = Math.pow(p.life, 1.5);
-             if (p.behavior === 'spark') {
-                 if (Math.random() > 0.8) alpha *= 1.5;
-                 else if (Math.random() < 0.2) alpha *= 0.5;
-             }
-        }
-        ctx.globalAlpha = Math.min(1, Math.max(0, alpha));
-        
+        ctx.globalAlpha = Math.min(1, Math.max(0, p.life));
         ctx.beginPath();
-        const velocity = Math.hypot(p.vx, p.vy);
-
-        if (!isOffline && velocity > 1.5 && p.behavior !== 'normal') {
-            ctx.lineWidth = p.size;
-            ctx.strokeStyle = p.color;
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p.x - p.vx * 2, p.y - p.vy * 2);
-            ctx.stroke();
-        } else {
-            const size = p.size * (isOffline ? 1 : (p.life < 0.3 ? p.life * 3 : 1)); 
-            ctx.arc(p.x, p.y, Math.max(0, size), 0, Math.PI * 2);
-            ctx.fill();
-        }
+        ctx.arc(p.x, p.y, Math.max(0, p.size * p.life), 0, Math.PI * 2);
+        ctx.fill();
       }
     });
 
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-
     requestRef.current = requestAnimationFrame(() => update(ctx));
   }, [createParticles, isOffline]);
 
@@ -460,8 +355,7 @@ const App: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const resize = () => { 
-        canvas.width = window.innerWidth; 
-        canvas.height = window.innerHeight; 
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight; 
     };
     window.addEventListener('resize', resize);
     resize();
@@ -480,11 +374,7 @@ const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [charging]);
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (isMenuOpen) return;
-    setCharging(true);
-  };
-
+  const onPointerDown = () => { if (!isMenuOpen) setCharging(true); };
   const onPointerUp = (e: React.PointerEvent) => {
     if (!charging) return;
     setCharging(false);
@@ -534,14 +424,12 @@ const App: React.FC = () => {
             style={{ width: `${(chargeLevel / 3) * 100}%` }} 
           />
         </div>
-        <span className={`text-[8px] tracking-[0.4em] font-serif-elegant uppercase ${isOffline ? 'text-black/20' : 'text-white/20'}`}>
-          凝神
-        </span>
+        <span className={`text-[8px] tracking-[0.4em] font-serif-elegant uppercase ${isOffline ? 'text-black/20' : 'text-white/20'}`}>凝神</span>
       </div>
 
-      {/* Combo 显示 */}
+      {/* Combo 显示 - 3s 消失逻辑在 useEffect 中实现 */}
       {combo > 1 && (
-        <div className="absolute top-40 left-1/2 -translate-x-1/2 z-10">
+        <div className="absolute top-40 left-1/2 -translate-x-1/2 z-10 animate-in">
           <span className={`font-serif-elegant text-xs italic tracking-widest ${isOffline ? 'text-black/30' : 'text-white/20'}`}>
             {combo}x 重奏
           </span>
@@ -554,8 +442,7 @@ const App: React.FC = () => {
           key={b.id}
           className="blessing-text absolute left-1/2 pointer-events-none font-serif-elegant text-xl whitespace-nowrap z-10"
           style={{ 
-            top: `${b.y}px`, 
-            opacity: b.opacity,
+            top: `${b.y}px`, opacity: b.opacity,
             color: isOffline ? '#000' : '#fff',
             textShadow: isOffline ? 'none' : '0 0 15px rgba(255,255,255,0.4)'
           }}
@@ -567,13 +454,10 @@ const App: React.FC = () => {
       {/* 底部状态 - 双击切换模式 */}
       <div 
         className={`absolute bottom-8 right-10 text-[9px] tracking-[0.3em] font-serif-elegant pointer-events-auto cursor-pointer z-10 uppercase transition-opacity hover:opacity-100 opacity-60 ${isOffline ? 'text-black/40' : 'text-white/30'}`}
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          setIsOffline(!isOffline);
-        }}
+        onDoubleClick={() => setIsOffline(!isOffline)}
         title="双击切换模式"
       >
-        {isOffline ? '墨染 / 水墨模式' : '流金 / 星空模式'}
+        {isOffline ? '墨染模式 / 水墨' : '流金模式 / 星穹'}
       </div>
 
       {/* 设置菜单 */}
@@ -591,18 +475,13 @@ const App: React.FC = () => {
               <div className={`h-[1px] w-8 mx-auto ${isOffline ? 'bg-black/20' : 'bg-white/20'}`}></div>
             </div>
 
-            {/* 音量控制 */}
             <div className="flex flex-col gap-4">
               <label className="text-[10px] tracking-[0.3em] uppercase opacity-50 flex justify-between">
                 <span>音量</span>
                 <span>{Math.round(volume * 100)}%</span>
               </label>
               <input 
-                type="range" 
-                min="0" 
-                max="1" 
-                step="0.01" 
-                value={volume} 
+                type="range" min="0" max="1" step="0.01" value={volume} 
                 onChange={handleVolumeChange}
                 className={`w-full h-[2px] appearance-none cursor-pointer outline-none transition-colors ${isOffline ? 'bg-black/10 accent-black/60' : 'bg-white/10 accent-white/60'}`}
               />
