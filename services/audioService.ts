@@ -1,20 +1,36 @@
 
 class AudioService {
   private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
   private comboCount: number = 0;
+  private volume: number = 0.5;
 
   private init() {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
+      this.masterGain.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
   }
 
+  setVolume(value: number) {
+    this.volume = value;
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setTargetAtTime(value, this.ctx.currentTime, 0.05);
+    }
+  }
+
+  getVolume() {
+    return this.volume;
+  }
+
   playLaunch() {
     this.init();
-    if (!this.ctx) return;
+    if (!this.ctx || !this.masterGain) return;
     
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
@@ -27,7 +43,7 @@ class AudioService {
     gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
     
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    gain.connect(this.masterGain);
     
     osc.start();
     osc.stop(this.ctx.currentTime + 0.3);
@@ -35,7 +51,7 @@ class AudioService {
 
   playPop(power: number) {
     this.init();
-    if (!this.ctx) return;
+    if (!this.ctx || !this.masterGain) return;
 
     const noise = this.ctx.createBufferSource();
     const bufferSize = this.ctx.sampleRate * 0.5;
@@ -58,11 +74,10 @@ class AudioService {
     
     noise.connect(filter);
     filter.connect(gain);
-    gain.connect(this.ctx.destination);
+    gain.connect(this.masterGain);
     
     noise.start();
 
-    // Occasional bell chime
     if (Math.random() > 0.7) {
       this.playChime();
     }
@@ -74,7 +89,7 @@ class AudioService {
   }
 
   private playChime() {
-    if (!this.ctx) return;
+    if (!this.ctx || !this.masterGain) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'triangle';
@@ -82,13 +97,13 @@ class AudioService {
     gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 2);
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    gain.connect(this.masterGain);
     osc.start();
     osc.stop(this.ctx.currentTime + 2);
   }
 
   private playWhaleSong() {
-    if (!this.ctx) return;
+    if (!this.ctx || !this.masterGain) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     const lfo = this.ctx.createOscillator();
@@ -108,7 +123,7 @@ class AudioService {
     lfo.connect(lfoGain);
     lfoGain.connect(osc.frequency);
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    gain.connect(this.masterGain);
 
     lfo.start();
     osc.start();
