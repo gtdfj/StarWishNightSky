@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 
-// --- 类型定义 ---
+// --- Types ---
 interface Point {
   x: number;
   y: number;
@@ -44,7 +44,7 @@ interface Blessing {
   id: number;
 }
 
-// --- 常量配置 ---
+// --- Constants ---
 const QUOTES = [
   "醉后不知天在水，满船清梦压星河",
   "星河滚烫，你是人间理想",
@@ -94,7 +94,7 @@ const CONSTELLATIONS = [
   }
 ];
 
-// --- 音频服务 ---
+// --- Audio Service ---
 class AudioService {
   private ctx: AudioContext | null = null;
   private comboCount: number = 0;
@@ -111,15 +111,20 @@ class AudioService {
   playLaunch() {
     this.init();
     if (!this.ctx) return;
+    
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
+    
     osc.type = 'sine';
     osc.frequency.setValueAtTime(400, this.ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.3);
+    
     gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+    
     osc.connect(gain);
     gain.connect(this.ctx.destination);
+    
     osc.start();
     osc.stop(this.ctx.currentTime + 0.3);
   }
@@ -127,25 +132,34 @@ class AudioService {
   playPop(power: number) {
     this.init();
     if (!this.ctx) return;
+
     const noise = this.ctx.createBufferSource();
     const bufferSize = this.ctx.sampleRate * 0.3;
     const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
+    
     for (let i = 0; i < bufferSize; i++) {
       data[i] = Math.random() * 2 - 1;
     }
+    
     noise.buffer = buffer;
+    
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(power > 1.5 ? 2000 : 1000, this.ctx.currentTime);
+    
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0.2 * (power/2), this.ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.4);
+    
     noise.connect(filter);
     filter.connect(gain);
     gain.connect(this.ctx.destination);
+    
     noise.start();
+
     if (Math.random() > 0.8) this.playChime();
+    
     this.comboCount++;
     if (this.comboCount % 8 === 0) this.playAmbient();
   }
@@ -183,7 +197,7 @@ class AudioService {
 
 const audioService = new AudioService();
 
-// --- 核心应用组件 ---
+// --- Main App Component ---
 const App: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [charging, setCharging] = useState(false);
@@ -197,7 +211,6 @@ const App: React.FC = () => {
   const particles = useRef<Particle[]>([]);
   const projectiles = useRef<FireworkProjectile[]>([]);
   const backgroundStars = useRef<{x: number, y: number, s: number, a: number, t: number, speed: number}[]>([]);
-  const auroraWaves = useRef<{offset: number, speed: number, color: string}[]>([]);
   const requestRef = useRef<number>();
 
   useEffect(() => {
@@ -213,12 +226,6 @@ const App: React.FC = () => {
       });
     }
     backgroundStars.current = stars;
-
-    auroraWaves.current = [
-      { offset: 0, speed: 0.0004, color: 'rgba(0, 255, 150, 0.04)' },
-      { offset: Math.PI / 2, speed: 0.0003, color: 'rgba(100, 0, 255, 0.03)' },
-      { offset: Math.PI, speed: 0.0005, color: 'rgba(0, 200, 255, 0.04)' }
-    ];
   }, []);
 
   const createParticles = useCallback((x: number, y: number, color: string, power: number) => {
@@ -229,11 +236,18 @@ const App: React.FC = () => {
     for (let i = 0; i < count; i++) {
       const angle = (Math.PI * 2 / count) * i;
       const speed = (Math.random() * 3.5 + 3) * power;
+      
       const p: Particle = {
-        x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-        life: 1, maxLife: isOffline ? 2.8 : 1.3 + Math.random() * 0.9,
-        color: finalColor, size: isOffline ? 4 + Math.random() * 5 : 2 + Math.random() * 1.8,
-        friction: isOffline ? 0.93 : 0.965, gravity: isOffline ? 0.09 : 0.24, trail: []
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1,
+        maxLife: isOffline ? 2.8 : 1.3 + Math.random() * 0.9,
+        color: finalColor,
+        size: isOffline ? 4 + Math.random() * 5 : 2 + Math.random() * 1.8,
+        friction: isOffline ? 0.93 : 0.965,
+        gravity: isOffline ? 0.09 : 0.24,
+        trail: []
       };
       particles.current.push(p);
     }
@@ -255,9 +269,11 @@ const App: React.FC = () => {
       const scale = 22 * power;
       const rotation = Math.random() * Math.PI * 2;
       const cosR = Math.cos(rotation), sinR = Math.sin(rotation);
+
       constellation.points.forEach(([px, py]) => {
         particles.current.push({
-          x: x + (px * cosR - py * sinR) * scale, y: y + (px * sinR + py * cosR) * scale,
+          x: x + (px * cosR - py * sinR) * scale,
+          y: y + (px * sinR + py * cosR) * scale,
           vx: 0, vy: 0, life: 1, maxLife: 4.5, color: '#FFFFFF', size: 2.8, friction: 0.99, gravity: 0, trail: []
         });
       });
@@ -271,23 +287,30 @@ const App: React.FC = () => {
   const launchFirework = useCallback((x: number, y: number, power: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
     const color = isOffline ? '#222' : COLORS[Math.floor(Math.random() * COLORS.length)];
     const projectile: FireworkProjectile = {
-      x: canvas.width / 2 + (Math.random() - 0.5) * 60, y: canvas.height + 20, targetY: y,
-      vx: (x - canvas.width / 2) / 68, vy: -15 - power * 3.5,
+      x: canvas.width / 2 + (Math.random() - 0.5) * 60,
+      y: canvas.height + 20,
+      targetY: y,
+      vx: (x - canvas.width / 2) / 68,
+      vy: -15 - power * 3.5,
       color, power, trail: [], active: true
     };
     projectiles.current.push(projectile);
     audioService.playLaunch();
+
     const now = Date.now();
-    if (now - lastFireTime.current < 2800) setCombo(c => c + 1);
-    else setCombo(1);
+    if (now - lastFireTime.current < 2800) {
+      setCombo(c => c + 1);
+    } else {
+      setCombo(1);
+    }
     lastFireTime.current = now;
   }, [isOffline]);
 
   const update = useCallback((ctx: CanvasRenderingContext2D) => {
     const { width, height } = ctx.canvas;
-    const now = Date.now();
     
     if (isOffline) {
       ctx.fillStyle = '#f6f2e9';
@@ -299,24 +322,6 @@ const App: React.FC = () => {
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, width, height);
 
-      // 极光效果
-      ctx.save();
-      ctx.globalCompositeOperation = 'screen';
-      auroraWaves.current.forEach(w => {
-        const g = ctx.createLinearGradient(0, 0, width, 0);
-        g.addColorStop(0, 'transparent'); g.addColorStop(0.5, w.color); g.addColorStop(1, 'transparent');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.moveTo(0, height * 0.4);
-        for (let x = 0; x <= width; x += 30) {
-          ctx.lineTo(x, height * 0.25 + Math.sin(x * 0.0012 + now * w.speed + w.offset) * 70);
-        }
-        ctx.lineTo(width, height); ctx.lineTo(0, height);
-        ctx.fill();
-      });
-      ctx.restore();
-
-      // 星点绘制
       backgroundStars.current.forEach(star => {
         star.t += star.speed;
         const alpha = star.a * (0.25 + Math.sin(star.t) * 0.75);
@@ -327,35 +332,24 @@ const App: React.FC = () => {
       });
     }
 
-    // 视差山峦
-    const drawMountain = (h: number, c: string, p: number) => {
-      ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(0, height);
-      for (let x = 0; x <= width; x += 80) {
-        ctx.lineTo(x, height - h + Math.sin(x * 0.0008 * p + now * 0.0001) * 30);
-      }
-      ctx.lineTo(width, height); ctx.fill();
-    };
-
-    if (isOffline) {
-      drawMountain(140, '#e5e0d4', 0.6); 
-      drawMountain(90, '#d8d3c5', 1.3); 
-    } else {
-      drawMountain(160, '#010107', 0.4); 
-      drawMountain(110, '#03030d', 1.2); 
-    }
-
     projectiles.current = projectiles.current.filter(p => p.active);
     projectiles.current.forEach(p => {
       p.x += p.vx; p.y += p.vy; p.vy += 0.25;
       p.trail.push({ x: p.x, y: p.y });
       if (p.trail.length > 25) p.trail.shift();
-      ctx.beginPath(); ctx.strokeStyle = p.color; ctx.lineWidth = isOffline ? 4.5 : 1.8; ctx.lineCap = 'round';
+
+      ctx.beginPath();
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = isOffline ? 4.5 : 1.8;
+      ctx.lineCap = 'round';
       p.trail.forEach((pos, idx) => {
         ctx.globalAlpha = idx / p.trail.length;
         if (idx === 0) ctx.moveTo(pos.x, pos.y);
         else ctx.lineTo(pos.x, pos.y);
       });
-      ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
       if (p.vy >= 0 || p.y <= p.targetY) {
         p.active = false;
         createParticles(p.x, p.y, p.color, p.power);
@@ -365,13 +359,18 @@ const App: React.FC = () => {
     particles.current = particles.current.filter(p => p.life > 0);
     particles.current.forEach(p => {
       p.vx *= p.friction; p.vy *= p.friction; p.vy += p.gravity;
-      if (p.wobbleSpeed) { p.wobbleTheta! += p.wobbleSpeed; p.x += Math.sin(p.wobbleTheta!) * 0.35; }
+      if (p.wobbleSpeed) {
+        p.wobbleTheta! += p.wobbleSpeed;
+        p.x += Math.sin(p.wobbleTheta!) * 0.35;
+      }
       p.x += p.vx; p.y += p.vy;
       p.life -= 1 / (60 * p.maxLife);
+
       if (p.life > 0) {
         ctx.fillStyle = p.color;
         const alpha = isOffline ? p.life * 0.85 : Math.pow(p.life, 2);
         ctx.globalAlpha = alpha;
+        
         ctx.beginPath();
         const size = Math.max(0.1, p.size * (isOffline ? p.life : p.life * 1.6));
         ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
@@ -379,6 +378,7 @@ const App: React.FC = () => {
       }
     });
     ctx.globalAlpha = 1;
+
     requestRef.current = requestAnimationFrame(() => update(ctx));
   }, [createParticles, isOffline]);
 
@@ -399,13 +399,17 @@ const App: React.FC = () => {
 
   useEffect(() => {
     let timer: number;
-    if (charging) timer = window.setInterval(() => setChargeLevel(p => Math.min(p + 0.045, 3)), 30);
+    if (charging) {
+      timer = window.setInterval(() => setChargeLevel(p => Math.min(p + 0.045, 3)), 30);
+    }
     return () => clearInterval(timer);
   }, [charging]);
 
   const handleTitleClick = () => {
     const now = Date.now();
-    if (now - lastTitleClickTime.current < 400) setIsOffline(!isOffline);
+    if (now - lastTitleClickTime.current < 400) {
+      setIsOffline(!isOffline);
+    }
     lastTitleClickTime.current = now;
   };
 
@@ -419,8 +423,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setBlessings(prev => prev.map(b => ({ ...b, y: b.y - 0.45, opacity: b.opacity - 0.0035 }))
-        .filter(b => b.opacity > 0));
+      setBlessings(prev => prev.map(b => ({
+        ...b, y: b.y - 0.45, opacity: b.opacity - 0.0035
+      })).filter(b => b.opacity > 0));
     }, 16);
     return () => clearInterval(timer);
   }, []);
@@ -450,7 +455,9 @@ const App: React.FC = () => {
             style={{ width: `${(chargeLevel / 3) * 100}%` }} 
           />
         </div>
-        <span className={`text-[8px] tracking-[0.4em] font-serif-elegant uppercase ${isOffline ? 'text-black/20' : 'text-white/20'}`}>Focusing Intent</span>
+        <span className={`text-[8px] tracking-[0.4em] font-serif-elegant uppercase ${isOffline ? 'text-black/20' : 'text-white/20'}`}>
+          Focusing Intent
+        </span>
       </div>
 
       {combo > 1 && (
@@ -466,7 +473,8 @@ const App: React.FC = () => {
           key={b.id}
           className="blessing-text absolute left-1/2 pointer-events-none font-serif-elegant text-xl whitespace-nowrap z-10"
           style={{ 
-            top: `${b.y}px`, opacity: b.opacity,
+            top: `${b.y}px`, 
+            opacity: b.opacity,
             color: isOffline ? '#111' : '#eee',
             textShadow: isOffline ? 'none' : '0 0 20px rgba(255,255,255,0.15)'
           }}
