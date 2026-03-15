@@ -1,5 +1,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Settings, Trash2, Send, Sparkles, Moon, Sun, Info } from 'lucide-react';
 import { Particle, FireworkProjectile, Blessing, Point } from './types';
 import { QUOTES, COLORS, SUMI_COLORS, CONSTELLATIONS } from './constants';
 import { audioService } from './services/audioService';
@@ -13,6 +15,9 @@ const App: React.FC = () => {
   const [isOffline, setIsOffline] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [volume, setVolume] = useState(audioService.getVolume());
+  const [wishText, setWishText] = useState('');
+  const [showWishInput, setShowWishInput] = useState(false);
+  const [activeFireworkType, setActiveFireworkType] = useState<'radial' | 'heart' | 'ring' | 'willow'>('radial');
   
   const lastFireTime = useRef(0);
   const particles = useRef<Particle[]>([]);
@@ -49,9 +54,26 @@ const App: React.FC = () => {
     }
 
     const count = Math.floor(power * 100 + 50);
+    const type = isOffline ? 'radial' : activeFireworkType;
+
     for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speedStr = (Math.random() * 0.5 + 0.5) * (isOffline ? 5 : 8) * power;
+      let angle = Math.random() * Math.PI * 2;
+      let speedMult = 1;
+
+      if (type === 'heart') {
+        // 心形方程: x = 16sin^3(t), y = 13cos(t) - 5cos(2t) - 2cos(3t) - cos(4t)
+        const t = Math.random() * Math.PI * 2;
+        const hx = 16 * Math.pow(Math.sin(t), 3);
+        const hy = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+        angle = Math.atan2(hy, hx);
+        speedMult = Math.sqrt(hx * hx + hy * hy) / 16;
+      } else if (type === 'ring') {
+        speedMult = 1;
+      } else if (type === 'willow') {
+        speedMult = Math.random() * 0.5 + 0.5;
+      }
+
+      const speedStr = (Math.random() * 0.5 + 0.5) * (isOffline ? 5 : 8) * power * speedMult;
       const speed = speedStr * (0.8 + Math.random() * 0.4);
       
       const p: Particle = {
@@ -59,15 +81,32 @@ const App: React.FC = () => {
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         life: 1,
-        maxLife: isOffline ? 2.5 : 1.0 + Math.random() * 1.0,
+        maxLife: isOffline ? 2.5 : (type === 'willow' ? 3.5 : 1.0 + Math.random() * 1.0),
         color: baseColor,
         size: isOffline ? 3 + Math.random() * 4 : 1.5 + Math.random() * 1.5,
-        friction: isOffline ? 0.94 : 0.95,
-        gravity: isOffline ? 0.08 : 0.12,
+        friction: type === 'willow' ? 0.98 : (isOffline ? 0.94 : 0.95),
+        gravity: type === 'willow' ? 0.04 : (isOffline ? 0.08 : 0.12),
         trail: [],
         behavior: 'normal'
       };
       particles.current.push(p);
+    }
+
+    // Ring 模式额外增加一圈
+    if (type === 'ring') {
+      for (let i = 0; i < 40; i++) {
+        const angle = (i / 40) * Math.PI * 2;
+        const speed = 6 * power;
+        particles.current.push({
+          x, y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 1, maxLife: 1.5,
+          color: '#FFFFFF', size: 2,
+          friction: 0.96, gravity: 0.1, trail: [],
+          behavior: 'normal'
+        });
+      }
     }
 
     if (!isOffline && power > 0.6) {
@@ -106,7 +145,7 @@ const App: React.FC = () => {
     }
 
     const quote = QUOTES[Math.floor(Math.random() * QUOTES.length)];
-    setBlessings(prev => [...prev.slice(-2), { 
+    setBlessings(prev => [...prev.slice(-5), { 
       text: quote, 
       opacity: 1, 
       y: y - 80, 
@@ -114,7 +153,7 @@ const App: React.FC = () => {
       rotation: (Math.random() - 0.5) * 10
     }]);
     audioService.playPop(power);
-  }, [isOffline]);
+  }, [isOffline, activeFireworkType]);
 
   const launchFirework = useCallback((x: number, y: number, power: number) => {
     const canvas = canvasRef.current;
@@ -148,10 +187,8 @@ const App: React.FC = () => {
       ctx.fillStyle = '#f5f0e6'; 
       ctx.fillRect(0, 0, width, height);
     } else {
-      const grad = ctx.createLinearGradient(0, 0, 0, height);
-      grad.addColorStop(0, '#020205'); 
-      grad.addColorStop(1, '#08081a');
-      ctx.fillStyle = grad;
+      // 使用纯色背景代替渐变
+      ctx.fillStyle = '#020205';
       ctx.fillRect(0, 0, width, height);
 
       ctx.globalCompositeOperation = 'lighter';
@@ -213,10 +250,8 @@ const App: React.FC = () => {
 
       if (p.life > 0) {
         if (p.behavior === 'flash') {
-            const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
-            grad.addColorStop(0, `rgba(255,255,255,${p.life})`);
-            grad.addColorStop(1, 'rgba(255,255,255,0)');
-            ctx.fillStyle = grad;
+            // 使用半透明纯色代替径向渐变
+            ctx.fillStyle = `rgba(255, 255, 255, ${p.life * 0.5})`;
             ctx.beginPath();
             ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
             ctx.fill();
@@ -310,24 +345,148 @@ const App: React.FC = () => {
     audioService.setVolume(val);
   };
 
+  const handleSendWish = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!wishText.trim()) return;
+    
+    setBlessings(prev => [...prev.slice(-5), {
+      text: wishText,
+      opacity: 1,
+      y: window.innerHeight / 2,
+      id: Date.now(),
+      rotation: 0
+    }]);
+    setWishText('');
+    setShowWishInput(false);
+  };
+
+  const clearBlessings = () => {
+    setBlessings([]);
+  };
+
   return (
     <div 
       className={`relative w-full h-screen overflow-hidden transition-colors duration-1000 ${isOffline ? 'bg-[#f5f0e6]' : 'bg-[#020205]'}`}
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
     >
+      {/* 水墨模式纸张纹理 */}
+      {isOffline && (
+        <div className="absolute inset-0 pointer-events-none opacity-20 mix-blend-multiply bg-[url('https://www.transparenttextures.com/patterns/natural-paper.png')]" />
+      )}
+
       <canvas ref={canvasRef} className="absolute inset-0 cursor-crosshair" />
       
       {/* 极简页眉 */}
-      <div className="absolute top-16 left-0 right-0 pointer-events-none flex flex-col items-center select-none z-10">
-        <h1 
+      <div className="absolute top-12 left-0 right-0 pointer-events-none flex flex-col items-center select-none z-10">
+        <motion.h1 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
           className={`text-2xl font-serif-elegant tracking-[0.6em] mb-2 transition-colors duration-1000 cursor-pointer pointer-events-auto ${isOffline ? 'text-black/70' : 'text-white/40'} hover:scale-105 active:scale-95 transition-transform`}
           onClick={() => setIsMenuOpen(true)}
         >
           {isOffline ? '墨 · 染' : '星 愿 · 夜 穹'}
-        </h1>
+        </motion.h1>
         <div className={`h-[1px] w-12 transition-colors duration-1000 ${isOffline ? 'bg-black/10' : 'bg-white/10'}`}></div>
       </div>
+
+      {/* 侧边工具栏 */}
+      <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-6 z-30">
+        <button 
+          onClick={() => setIsMenuOpen(true)}
+          className={`p-3 rounded-full transition-all ${isOffline ? 'bg-black/5 hover:bg-black/10 text-black/40' : 'bg-white/5 hover:bg-white/10 text-white/30'}`}
+          title="Settings"
+        >
+          <Settings size={18} />
+        </button>
+        <button 
+          onClick={() => setShowWishInput(true)}
+          className={`p-3 rounded-full transition-all ${isOffline ? 'bg-black/5 hover:bg-black/10 text-black/40' : 'bg-white/5 hover:bg-white/10 text-white/30'}`}
+          title="Write a Wish"
+        >
+          <Send size={18} />
+        </button>
+        <button 
+          onClick={clearBlessings}
+          className={`p-3 rounded-full transition-all ${isOffline ? 'bg-black/5 hover:bg-black/10 text-black/40' : 'bg-white/5 hover:bg-white/10 text-white/30'}`}
+          title="Clear Blessings"
+        >
+          <Trash2 size={18} />
+        </button>
+      </div>
+
+      {/* 烟火类型选择 (仅非水墨模式) */}
+      {!isOffline && (
+        <div className="absolute left-6 top-1/2 -translate-y-1/2 flex flex-col gap-4 z-30">
+          {(['radial', 'heart', 'ring', 'willow'] as const).map(type => (
+            <button
+              key={type}
+              onClick={() => setActiveFireworkType(type)}
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all border ${
+                activeFireworkType === type 
+                ? 'bg-white/20 border-white/40 text-white' 
+                : 'bg-white/5 border-white/10 text-white/30 hover:bg-white/10'
+              }`}
+              title={type.charAt(0).toUpperCase() + type.slice(1)}
+            >
+              {type === 'radial' && <Sparkles size={16} />}
+              {type === 'heart' && <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>}
+              {type === 'ring' && <div className="w-3 h-3 rounded-full border border-current" />}
+              {type === 'willow' && <div className="w-3 h-3 flex flex-col items-center"><div className="w-1 h-1 bg-current rounded-full mb-0.5" /><div className="w-0.5 h-2 bg-current opacity-50" /></div>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 许愿输入框 */}
+      <AnimatePresence>
+        {showWishInput && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-md"
+            onClick={() => setShowWishInput(false)}
+          >
+            <form 
+              onSubmit={handleSendWish}
+              className={`w-80 p-8 rounded-3xl shadow-2xl flex flex-col gap-6 ${isOffline ? 'bg-[#f5f0e6]' : 'bg-[#0a0a1a] border border-white/10'}`}
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className={`text-sm font-serif-elegant tracking-[0.3em] uppercase text-center opacity-60 ${isOffline ? 'text-black' : 'text-white'}`}>
+                Write Your Wish
+              </h3>
+              <input 
+                autoFocus
+                type="text"
+                value={wishText}
+                onChange={e => setWishText(e.target.value)}
+                placeholder="在此输入你的心愿..."
+                className={`w-full bg-transparent border-b py-2 outline-none text-lg font-brush transition-colors ${
+                  isOffline ? 'border-black/20 text-black placeholder:text-black/20' : 'border-white/20 text-white placeholder:text-white/20'
+                }`}
+              />
+              <div className="flex justify-between items-center mt-2">
+                <button 
+                  type="button"
+                  onClick={() => setShowWishInput(false)}
+                  className={`text-[10px] tracking-[0.2em] uppercase opacity-40 hover:opacity-100 ${isOffline ? 'text-black' : 'text-white'}`}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  className={`px-6 py-2 rounded-full text-[10px] tracking-[0.2em] uppercase transition-all ${
+                    isOffline ? 'bg-black text-white hover:bg-black/80' : 'bg-white text-black hover:bg-white/80'
+                  }`}
+                >
+                  Release
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 极简蓄力条 */}
       <div className={`absolute bottom-24 left-1/2 -translate-x-1/2 w-40 flex flex-col items-center gap-2 z-20 transition-opacity duration-300 ${charging ? 'opacity-100' : 'opacity-0'}`}>
@@ -404,6 +563,24 @@ const App: React.FC = () => {
                 onChange={handleVolumeChange}
                 className={`w-full h-[2px] appearance-none cursor-pointer outline-none transition-colors ${isOffline ? 'bg-black/10 accent-black/60' : 'bg-white/10 accent-white/60'}`}
               />
+            </div>
+
+            {/* 模式切换 */}
+            <div className="flex flex-col gap-4">
+              <label className="text-[10px] tracking-[0.3em] uppercase opacity-50">Mode</label>
+              <button 
+                onClick={() => setIsOffline(!isOffline)}
+                className={`w-full py-3 rounded-xl border flex items-center justify-center gap-3 transition-all ${
+                  isOffline 
+                  ? 'bg-black text-white border-black' 
+                  : 'bg-white/5 text-white border-white/10 hover:bg-white/10'
+                }`}
+              >
+                {isOffline ? <Sun size={14} /> : <Moon size={14} />}
+                <span className="text-[10px] tracking-[0.2em] uppercase">
+                  {isOffline ? 'Switch to Night' : 'Switch to Ink'}
+                </span>
+              </button>
             </div>
 
             <button 
