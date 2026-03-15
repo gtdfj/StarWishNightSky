@@ -1,0 +1,44 @@
+name: Vite Vue Build & Release
+
+# 触发方式：推送到 main 分支自动执行
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 必须开启，否则无法创建 Release
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # 安装依赖
+      - name: Install dependencies
+        run: npm install
+
+      # Vite 打包 Vue
+      - name: Build project
+        run: npm run build
+
+      # 压缩 dist 目录（方便下载）
+      - name: Zip dist folder
+        run: zip -r vue-dist.zip ./dist
+
+      # 自动生成版本号 + 创建 Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.sha }}
+          tag_name: v${{ github.run_number }}
+          files: vue-dist.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
