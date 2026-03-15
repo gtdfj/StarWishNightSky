@@ -1,594 +1,540 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Settings, Trash2, Send, Sparkles, Moon, Sun, Info } from 'lucide-react';
-import { Particle, FireworkProjectile, Blessing, Point } from './types';
-import { QUOTES, COLORS, SUMI_COLORS, CONSTELLATIONS } from './constants';
+import { Particle, FireworkProjectile, Blessing } from './types';
+import { QUOTES, COLORS, SUMI_COLORS } from './constants';
 import { audioService } from './services/audioService';
+
+const EN_QUOTES = [
+  "Lost in the stars, finding myself.", "You are the universe expressing itself.", "May you travel the world and find it beautiful.",
+  "Tonight, the stars orbit for you.", "Good fortune crosses mountains and seas to reach you.", "Listen to the wind, wait for the flowers.",
+  "Start small, finish great.", "May all go well and joy be with you.", "Keep your passion, run towards the mountains and seas.",
+  "Eyes full of stars, future full of hope.", "In this lonely universe, someone always lights a lamp for you.", "May all beautiful things meet unexpectedly.",
+  "Where the heart goes, there is light.", "Gentle and calm for a lifetime.", "Content yet striving, gentle yet firm."
+];
 
 const App: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  const getInitial = (key: string, defaultVal: any) => {
+    const saved = localStorage.getItem(key);
+    if (saved === null) return defaultVal;
+    try { return JSON.parse(saved); } catch { return saved; }
+  };
+
+  // --- 首次启动合规状态 ---
+  const [privacyAccepted, setPrivacyAccepted] = useState<boolean>(() => getInitial('firework-privacy-v1', false));
+  const [analyticsConsented, setAnalyticsConsented] = useState<boolean | null>(() => getInitial('firework-analytics-v1', null));
+  const [privacyDenied, setPrivacyDenied] = useState(false);
+
+  const [isOffline, setIsOffline] = useState<boolean>(() => getInitial('firework-offline', false));
+  const [volume, setVolume] = useState<number>(() => {
+      const v = getInitial('firework-volume', 0.5);
+      audioService.setVolume(v);
+      return v;
+  });
+  const [showStars, setShowStars] = useState<boolean>(() => getInitial('firework-stars', true));
+  const [showAurora, setShowAurora] = useState<boolean>(() => getInitial('firework-aurora', true));
+  const [fireworkStyle, setFireworkStyle] = useState<string>(() => getInitial('firework-style', 'random'));
+  const [language, setLanguage] = useState<string>(() => getInitial('firework-lang', 'zh'));
+  
+  const t = useCallback((zh: string, en: string) => language === 'zh' ? zh : en, [language]);
+  
   const [charging, setCharging] = useState(false);
   const [chargeLevel, setChargeLevel] = useState(0);
   const [blessings, setBlessings] = useState<Blessing[]>([]);
   const [combo, setCombo] = useState(0);
-  const [isOffline, setIsOffline] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [volume, setVolume] = useState(audioService.getVolume());
-  const [wishText, setWishText] = useState('');
-  const [showWishInput, setShowWishInput] = useState(false);
-  const [activeFireworkType, setActiveFireworkType] = useState<'radial' | 'heart' | 'ring' | 'willow'>('radial');
+  const [isMenuClosing, setIsMenuClosing] = useState(false);
+  
+  const closeSettings = () => {
+    setIsMenuClosing(true);
+    setTimeout(() => {
+      setIsMenuOpen(false);
+      setIsMenuClosing(false);
+    }, 300);
+  };
+  
+  const [tutorialStep, setTutorialStep] = useState<number>(() => {
+    const completed = localStorage.getItem('firework-tutorial-done');
+    return completed ? 2 : 0;
+  });
   
   const lastFireTime = useRef(0);
   const particles = useRef<Particle[]>([]);
   const projectiles = useRef<FireworkProjectile[]>([]);
   const backgroundStars = useRef<{x: number, y: number, s: number, a: number, t: number, speed: number}[]>([]);
-  const requestRef = useRef<number>();
+  const auroraOffset = useRef(0);
+  const requestRef = useRef<number>(0);
+
+  useEffect(() => { localStorage.setItem('firework-offline', JSON.stringify(isOffline)); }, [isOffline]);
+  useEffect(() => { localStorage.setItem('firework-volume', JSON.stringify(volume)); audioService.setVolume(volume); }, [volume]);
+  useEffect(() => { localStorage.setItem('firework-stars', JSON.stringify(showStars)); }, [showStars]);
+  useEffect(() => { localStorage.setItem('firework-aurora', JSON.stringify(showAurora)); }, [showAurora]);
+  useEffect(() => { localStorage.setItem('firework-style', JSON.stringify(fireworkStyle)); }, [fireworkStyle]);
+  useEffect(() => { localStorage.setItem('firework-lang', JSON.stringify(language)); }, [language]);
+
+  // 持久化隐私合规
+  useEffect(() => { 
+    if (privacyAccepted) localStorage.setItem('firework-privacy-v1', JSON.stringify(true)); 
+  }, [privacyAccepted]);
+  useEffect(() => { 
+    if (analyticsConsented !== null) localStorage.setItem('firework-analytics-v1', JSON.stringify(analyticsConsented)); 
+  }, [analyticsConsented]);
 
   useEffect(() => {
     const stars = [];
     for (let i = 0; i < 200; i++) {
       stars.push({
-        x: Math.random() * window.innerWidth,
-        y: Math.random() * window.innerHeight,
-        s: Math.random() * 1.5,
-        a: Math.random(),
-        t: Math.random() * 100,
+        x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight,
+        s: Math.random() * 1.5, a: Math.random(), t: Math.random() * 100,
         speed: 0.005 + Math.random() * 0.02
       });
     }
     backgroundStars.current = stars;
   }, []);
 
+  const drawAurora = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    if (!showAurora || isOffline) return;
+    ctx.globalCompositeOperation = 'lighter';
+    const time = auroraOffset.current;
+    auroraOffset.current += 0.002;
+
+    for (let i = 0; i < 3; i++) {
+      const grad = ctx.createLinearGradient(0, height * 0.1, 0, height * 0.7);
+      const color = i === 0 ? 'rgba(0, 255, 150, 0.05)' : i === 1 ? 'rgba(0, 150, 255, 0.04)' : 'rgba(150, 0, 255, 0.03)';
+      grad.addColorStop(0, 'transparent');
+      grad.addColorStop(0.5, color);
+      grad.addColorStop(1, 'transparent');
+
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(0, height);
+      for (let x = 0; x <= width; x += 10) {
+        const yOffset = Math.sin(x * 0.002 + time + i) * 50 + Math.cos(x * 0.005 - time * 0.5) * 30;
+        ctx.lineTo(x, height * (0.3 + i * 0.05) + yOffset);
+      }
+      ctx.lineTo(width, height);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  };
+
   const createParticles = useCallback((x: number, y: number, color: string, power: number) => {
     const particlePool = isOffline ? SUMI_COLORS : COLORS;
     const baseColor = isOffline ? particlePool[Math.floor(Math.random() * particlePool.length)] : color;
+    const isMobile = window.innerWidth < 768;
 
     if (!isOffline) {
       particles.current.push({
-        x, y, vx: 0, vy: 0, life: 1, maxLife: 0.1, 
-        color: '#FFFFFF', size: power * 80 + 20, 
-        friction: 1, gravity: 0, trail: [], 
+        x, y, vx: 0, vy: 0, life: 1, maxLife: 0.15, 
+        color: '#FFFFFF', size: power * (isMobile ? 80 : 120) + 30, 
+        friction: 1, gravity: 0, trail: [],
         behavior: 'flash'
       });
     }
 
-    const count = Math.floor(power * 100 + 50);
-    const type = isOffline ? 'radial' : activeFireworkType;
+    let currentStyle = fireworkStyle;
+    if (currentStyle === 'random') {
+      const r = Math.random();
+      if (r < 0.33) currentStyle = 'chrysanthemum';
+      else if (r < 0.66) currentStyle = 'willow';
+      else currentStyle = 'sparkle';
+    }
 
+    const count = Math.floor(power * (isMobile ? 40 : 60) + (isMobile ? 30 : 40)); 
     for (let i = 0; i < count; i++) {
-      let angle = Math.random() * Math.PI * 2;
-      let speedMult = 1;
+      const angle = Math.random() * Math.PI * 2;
+      let speed = (Math.random() * 0.7 + 0.3) * (isOffline ? 6 : (isMobile ? 8 : 10)) * power;
+      let life = isOffline ? 2.5 : 1.2 + Math.random() * 1.5;
+      let friction = 0.96;
+      let gravity = 0.12;
+      let behavior: any = 'normal';
 
-      if (type === 'heart') {
-        // 心形方程: x = 16sin^3(t), y = 13cos(t) - 5cos(2t) - 2cos(3t) - cos(4t)
-        const t = Math.random() * Math.PI * 2;
-        const hx = 16 * Math.pow(Math.sin(t), 3);
-        const hy = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
-        angle = Math.atan2(hy, hx);
-        speedMult = Math.sqrt(hx * hx + hy * hy) / 16;
-      } else if (type === 'ring') {
-        speedMult = 1;
-      } else if (type === 'willow') {
-        speedMult = Math.random() * 0.5 + 0.5;
+      if (currentStyle === 'willow' && !isOffline) {
+         speed *= 0.6;
+         life *= 2.0;
+         gravity = 0.18;
+         friction = 0.98;
+      } else if (currentStyle === 'sparkle' && !isOffline) {
+         behavior = 'sparkle';
+         life *= 1.2;
+      } else if (currentStyle === 'chrysanthemum') {
+         speed *= 1.2;
+         friction = 0.94;
       }
 
-      const speedStr = (Math.random() * 0.5 + 0.5) * (isOffline ? 5 : 8) * power * speedMult;
-      const speed = speedStr * (0.8 + Math.random() * 0.4);
-      
-      const p: Particle = {
-        x, y,
-        vx: Math.cos(angle) * speed,
+      particles.current.push({
+        x, y, 
+        vx: Math.cos(angle) * speed, 
         vy: Math.sin(angle) * speed,
-        life: 1,
-        maxLife: isOffline ? 2.5 : (type === 'willow' ? 3.5 : 1.0 + Math.random() * 1.0),
-        color: baseColor,
-        size: isOffline ? 3 + Math.random() * 4 : 1.5 + Math.random() * 1.5,
-        friction: type === 'willow' ? 0.98 : (isOffline ? 0.94 : 0.95),
-        gravity: type === 'willow' ? 0.04 : (isOffline ? 0.08 : 0.12),
+        life: 1, 
+        maxLife: life,
+        color: baseColor, 
+        size: isOffline ? 3 + Math.random() * 4 : 3 + Math.random() * 2,
+        friction, 
+        gravity: isOffline ? 0.08 : gravity,
         trail: [],
-        behavior: 'normal'
-      };
-      particles.current.push(p);
-    }
-
-    // Ring 模式额外增加一圈
-    if (type === 'ring') {
-      for (let i = 0; i < 40; i++) {
-        const angle = (i / 40) * Math.PI * 2;
-        const speed = 6 * power;
-        particles.current.push({
-          x, y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          life: 1, maxLife: 1.5,
-          color: '#FFFFFF', size: 2,
-          friction: 0.96, gravity: 0.1, trail: [],
-          behavior: 'normal'
-        });
-      }
-    }
-
-    if (!isOffline && power > 0.6) {
-      const sparkleCount = Math.floor(power * 60);
-      for (let i = 0; i < sparkleCount; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = (Math.random() * 2 + 2) * power;
-        particles.current.push({
-          x, y, 
-          vx: Math.cos(angle) * speed, 
-          vy: Math.sin(angle) * speed,
-          life: 1, maxLife: 1.5 + Math.random(), 
-          color: '#ffffff', 
-          size: 0.8 + Math.random() * 0.8,
-          friction: 0.96, gravity: 0.08, trail: [],
-          behavior: 'spark'
-        });
-      }
-    }
-
-    if (Math.random() > 0.85 && !isOffline) {
-      const constellation = CONSTELLATIONS[Math.floor(Math.random() * CONSTELLATIONS.length)];
-      const scale = 30 * power;
-      const rotation = Math.random() * Math.PI * 2;
-      const cosR = Math.cos(rotation), sinR = Math.sin(rotation);
-
-      constellation.points.forEach(([px, py]) => {
-        particles.current.push({
-          x: x + (px * cosR - py * sinR) * scale,
-          y: y + (px * sinR + py * cosR) * scale,
-          vx: 0, vy: 0, life: 1, maxLife: 3.5, 
-          color: '#FFFFFF', size: 2.5, friction: 0.99, gravity: 0, trail: [],
-          behavior: 'normal'
-        });
+        behavior
       });
     }
 
-    const quote = QUOTES[Math.floor(Math.random() * QUOTES.length)];
-    setBlessings(prev => [...prev.slice(-5), { 
+    const quoteList = language === 'zh' ? QUOTES : EN_QUOTES;
+    const quote = quoteList[Math.floor(Math.random() * quoteList.length)];
+    setBlessings(prev => [...prev.slice(-2), { 
       text: quote, 
       opacity: 1, 
       y: y - 80, 
       id: Date.now(),
-      rotation: (Math.random() - 0.5) * 10
+      rotation: (Math.random() - 0.5) * 10 
     }]);
     audioService.playPop(power);
-  }, [isOffline, activeFireworkType]);
+  }, [isOffline, fireworkStyle, language]);
 
   const launchFirework = useCallback((x: number, y: number, power: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
+    const canvas = canvasRef.current; if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const lw = canvas.width / dpr;
+    const lh = canvas.height / dpr;
+    
+    if (tutorialStep === 0) setTutorialStep(1);
+    
     const color = isOffline ? '#000' : COLORS[Math.floor(Math.random() * COLORS.length)];
-    const projectile: FireworkProjectile = {
-      x: canvas.width / 2 + (Math.random() - 0.5) * 40,
-      y: canvas.height + 20,
-      targetY: y,
-      vx: (x - canvas.width / 2) / 60,
-      vy: -15 - power * 4,
+    projectiles.current.push({
+      x: lw / 2 + (Math.random() - 0.5) * 40, y: lh + 20,
+      targetY: y, vx: (x - lw / 2) / 60, vy: -15 - power * 4.5,
       color, power, trail: [], active: true
-    };
-    projectiles.current.push(projectile);
+    });
     audioService.playLaunch();
-
     const now = Date.now();
-    if (now - lastFireTime.current < 2500) {
-      setCombo(c => c + 1);
-    } else {
-      setCombo(1);
-    }
+    if (now - lastFireTime.current < 2500) setCombo(c => c + 1); else setCombo(1);
     lastFireTime.current = now;
-  }, [isOffline]);
+  }, [isOffline, tutorialStep]);
 
   const update = useCallback((ctx: CanvasRenderingContext2D) => {
-    const { width, height } = ctx.canvas;
-    
-    if (isOffline) {
-      ctx.fillStyle = '#f5f0e6'; 
-      ctx.fillRect(0, 0, width, height);
-    } else {
-      // 使用纯色背景代替渐变
-      ctx.fillStyle = '#020205';
-      ctx.fillRect(0, 0, width, height);
+    const dpr = window.devicePixelRatio || 1;
+    const width = ctx.canvas.width / dpr;
+    const height = ctx.canvas.height / dpr;
 
-      ctx.globalCompositeOperation = 'lighter';
-      backgroundStars.current.forEach(star => {
-        star.t += star.speed;
-        const alpha = star.a * (0.4 + Math.sin(star.t) * 0.6);
-        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-        ctx.beginPath();
-        ctx.arc(star.x, star.y, star.s, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      ctx.globalCompositeOperation = 'source-over';
+    if (isOffline) { 
+        ctx.fillStyle = '#f5f0e6'; 
+        ctx.fillRect(0, 0, width, height); 
+    } else {
+      ctx.fillStyle = '#020205'; 
+      ctx.fillRect(0, 0, width, height);
+      drawAurora(ctx, width, height);
+
+      if (showStars) {
+        ctx.globalCompositeOperation = 'lighter';
+        backgroundStars.current.forEach(star => {
+          star.t += star.speed;
+          const alpha = star.a * (0.3 + Math.sin(star.t) * 0.7);
+          ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+          ctx.beginPath(); ctx.arc(star.x, star.y, star.s, 0, Math.PI * 2); ctx.fill();
+        });
+        ctx.globalCompositeOperation = 'source-over';
+      }
     }
 
-    if (isOffline) {
-      ctx.globalCompositeOperation = 'multiply';
-    } else {
-      ctx.globalCompositeOperation = 'lighter';
-    }
+    if (isOffline) ctx.globalCompositeOperation = 'multiply'; else ctx.globalCompositeOperation = 'lighter';
 
     projectiles.current = projectiles.current.filter(p => p.active);
     projectiles.current.forEach(p => {
-      p.x += p.vx; p.y += p.vy; p.vy += 0.22;
-      p.trail.push({ x: p.x, y: p.y });
-      if (p.trail.length > 15) p.trail.shift();
-
-      ctx.beginPath();
-      ctx.strokeStyle = p.color;
-      ctx.lineWidth = isOffline ? 3 : 2;
-      ctx.lineCap = 'round';
-      
+      p.x += p.vx; p.y += p.vy; p.vy += 0.22; p.trail.push({ x: p.x, y: p.y });
+      if (p.trail.length > 20) p.trail.shift();
+      ctx.beginPath(); ctx.strokeStyle = p.color; ctx.lineWidth = isOffline ? 3 : 2;
       if (p.trail.length > 0) {
         ctx.moveTo(p.trail[0].x, p.trail[0].y);
-        for (let i = 1; i < p.trail.length; i++) {
-            ctx.lineTo(p.trail[i].x, p.trail[i].y);
-        }
+        for (let i = 1; i < p.trail.length; i++) ctx.lineTo(p.trail[i].x, p.trail[i].y);
       }
       ctx.stroke();
-
-      if (p.vy >= 0 || p.y <= p.targetY) {
-        p.active = false;
-        createParticles(p.x, p.y, p.color, p.power);
-      }
+      if (p.vy >= 0 || p.y <= p.targetY) { p.active = false; createParticles(p.x, p.y, p.color, p.power); }
     });
 
     particles.current = particles.current.filter(p => p.life > 0);
     particles.current.forEach(p => {
-      p.vx *= p.friction; 
-      p.vy *= p.friction; 
-      p.vy += p.gravity;
-      
-      if (p.wobbleSpeed) {
-        p.wobbleTheta! += p.wobbleSpeed;
-        p.x += Math.sin(p.wobbleTheta!) * 0.3;
-      }
-      p.x += p.vx; 
+      const lastX = p.x;
+      const lastY = p.y;
+      p.vx *= p.friction; p.vy *= p.friction; p.vy += p.gravity;
+      p.x += p.vx + (Math.sin(p.life * 10) * 0.2); 
       p.y += p.vy;
       p.life -= 1 / (60 * p.maxLife);
-
+      
       if (p.life > 0) {
         if (p.behavior === 'flash') {
-            // 使用半透明纯色代替径向渐变
-            ctx.fillStyle = `rgba(255, 255, 255, ${p.life * 0.5})`;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            ctx.fill();
-            return;
-        }
-
-        ctx.fillStyle = p.color;
-        let alpha = p.life;
-        if (!isOffline) {
-             alpha = Math.pow(p.life, 1.5);
-             if (p.behavior === 'spark') {
-                 if (Math.random() > 0.8) alpha *= 1.5;
-                 else if (Math.random() < 0.2) alpha *= 0.5;
-             }
-        }
-        ctx.globalAlpha = Math.min(1, Math.max(0, alpha));
-        
-        ctx.beginPath();
-        const velocity = Math.hypot(p.vx, p.vy);
-
-        if (!isOffline && velocity > 1.5 && p.behavior !== 'normal') {
-            ctx.lineWidth = p.size;
-            ctx.strokeStyle = p.color;
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p.x - p.vx * 2, p.y - p.vy * 2);
-            ctx.stroke();
+          const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+          grad.addColorStop(0, `rgba(255,255,255,${p.life * 0.8})`); 
+          grad.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = grad; 
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
         } else {
-            const size = p.size * (isOffline ? 1 : (p.life < 0.3 ? p.life * 3 : 1)); 
-            ctx.arc(p.x, p.y, Math.max(0, size), 0, Math.PI * 2);
-            ctx.fill();
+          let currentAlpha = p.life;
+          if (p.behavior === 'sparkle') currentAlpha *= (Math.random() > 0.5 ? 1 : 0.2);
+          
+          if (!isOffline && (Math.abs(p.vx) > 0.1 || Math.abs(p.vy) > 0.1)) {
+            ctx.beginPath(); 
+            ctx.strokeStyle = p.color; 
+            ctx.globalAlpha = currentAlpha * 0.4; 
+            ctx.lineWidth = p.size;
+            ctx.moveTo(lastX - p.vx * 2, lastY - p.vy * 2);
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+          }
+          
+          ctx.fillStyle = p.color; 
+          ctx.globalAlpha = Math.min(1, Math.max(0, currentAlpha));
+          const s = Math.max(0.1, p.size * (p.life + 0.2));
+          ctx.beginPath(); ctx.arc(p.x, p.y, s, 0, Math.PI * 2); ctx.fill();
         }
       }
     });
 
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
     requestRef.current = requestAnimationFrame(() => update(ctx));
-  }, [createParticles, isOffline]);
+  }, [createParticles, isOffline, showStars, showAurora]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const resize = () => { 
-        canvas.width = window.innerWidth; 
-        canvas.height = window.innerHeight; 
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext('2d'); if (!ctx) return;
+    
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      
+      const stars = [];
+      for (let i = 0; i < 200; i++) {
+        stars.push({
+          x: Math.random() * w, y: Math.random() * h,
+          s: Math.random() * 1.5, a: Math.random(), t: Math.random() * 100,
+          speed: 0.005 + Math.random() * 0.02
+        });
+      }
+      backgroundStars.current = stars;
     };
-    window.addEventListener('resize', resize);
+
+    const resizeObserver = new ResizeObserver(() => resize());
+    resizeObserver.observe(document.body);
     resize();
+
     requestRef.current = requestAnimationFrame(() => update(ctx));
     return () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(requestRef.current);
+      resizeObserver.disconnect();
     };
   }, [update]);
 
   useEffect(() => {
-    let timer: number;
-    if (charging) {
-      timer = window.setInterval(() => setChargeLevel(p => Math.min(p + 0.05, 3)), 20);
-    }
+    let timer: number; if (charging) timer = window.setInterval(() => setChargeLevel(p => Math.min(p + 0.06, 3)), 20);
     return () => clearInterval(timer);
   }, [charging]);
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (isMenuOpen) return;
-    setCharging(true);
+  const onPointerDown = () => { if (!isMenuOpen && privacyAccepted) setCharging(true); };
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (!charging) return; setCharging(false);
+    const finalPower = chargeLevel < 0.3 ? (Math.random() * 1.5 + 0.5) : chargeLevel;
+    launchFirework(e.clientX, e.clientY, finalPower); 
+    setChargeLevel(0);
   };
 
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (!charging) return;
-    setCharging(false);
-    launchFirework(e.clientX, e.clientY, chargeLevel);
-    setChargeLevel(0);
+  const openSettings = () => {
+    setIsMenuOpen(true);
+    setIsMenuClosing(false);
+    if (tutorialStep === 1) {
+      setTutorialStep(2);
+      localStorage.setItem('firework-tutorial-done', 'true');
+    }
+  };
+
+  const resetTutorial = () => {
+    localStorage.removeItem('firework-tutorial-done');
+    setTutorialStep(0);
+    closeSettings();
   };
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setBlessings(prev => prev.map(b => ({
-        ...b, y: b.y - 0.5, opacity: b.opacity - 0.005
-      })).filter(b => b.opacity > 0));
+      setBlessings(prev => prev.map(b => ({ ...b, y: b.y - 0.6, opacity: b.opacity - 0.006 })).filter(b => b.opacity > 0));
     }, 16);
     return () => clearInterval(timer);
   }, []);
 
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseFloat(e.target.value);
-    setVolume(val);
-    audioService.setVolume(val);
-  };
-
-  const handleSendWish = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!wishText.trim()) return;
-    
-    setBlessings(prev => [...prev.slice(-5), {
-      text: wishText,
-      opacity: 1,
-      y: window.innerHeight / 2,
-      id: Date.now(),
-      rotation: 0
-    }]);
-    setWishText('');
-    setShowWishInput(false);
-  };
-
-  const clearBlessings = () => {
-    setBlessings([]);
-  };
+  if (privacyDenied) {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#020205] text-white p-10 text-center font-serif-elegant">
+        <div className="max-w-md">
+          <p className="opacity-60 mb-8 leading-relaxed tracking-widest">
+            您必须同意隐私政策才能使用“星愿·夜穹”。<br/>由于未能获得您的授权，应用无法继续运行。
+          </p>
+          <button onClick={() => window.location.reload()} className="text-xs uppercase border border-white/20 px-6 py-2 hover:bg-white/10 transition-colors">重新进入</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div 
-      className={`relative w-full h-screen overflow-hidden transition-colors duration-1000 ${isOffline ? 'bg-[#f5f0e6]' : 'bg-[#020205]'}`}
-      onPointerDown={onPointerDown}
-      onPointerUp={onPointerUp}
-    >
-      {/* 水墨模式纸张纹理 */}
-      {isOffline && (
-        <div className="absolute inset-0 pointer-events-none opacity-20 mix-blend-multiply bg-[url('https://www.transparenttextures.com/patterns/natural-paper.png')]" />
-      )}
-
+    <div className={`relative w-full h-screen overflow-hidden transition-colors duration-1000 ${isOffline ? 'bg-[#f5f0e6] is-offline text-black' : 'bg-[#020205] text-white'}`} onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
       <canvas ref={canvasRef} className="absolute inset-0 cursor-crosshair" />
       
-      {/* 极简页眉 */}
-      <div className="absolute top-12 left-0 right-0 pointer-events-none flex flex-col items-center select-none z-10">
-        <motion.h1 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className={`text-2xl font-serif-elegant tracking-[0.6em] mb-2 transition-colors duration-1000 cursor-pointer pointer-events-auto ${isOffline ? 'text-black/70' : 'text-white/40'} hover:scale-105 active:scale-95 transition-transform`}
-          onClick={() => setIsMenuOpen(true)}
+      {!privacyAccepted && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-xl animate-in fade-in duration-700">
+          <div className="w-80 p-10 bg-[#0a0a1a] border border-white/10 rounded-3xl text-center flex flex-col gap-8 shadow-[0_20px_60px_rgba(0,0,0,0.8)]">
+            <h2 className="font-serif-elegant text-lg tracking-[0.4em] mb-2 uppercase text-white">隐私政策</h2>
+            <p className="text-[11px] leading-relaxed tracking-widest text-white/50 font-serif-elegant">
+              在使用本应用前，请详细阅读我们的<br/>
+              <a 
+                href="https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1848266364016459648" 
+                target="_blank" 
+                className="text-white/80 underline decoration-white/20 hover:text-white transition-colors"
+              >
+                《隐私政策》
+              </a>
+            </p>
+            <div className="flex flex-col gap-4">
+              <button onClick={() => setPrivacyAccepted(true)} className="primary-button py-3.5 font-serif-elegant text-xs tracking-[0.4em] rounded-full uppercase">同意</button>
+              <button onClick={() => setPrivacyDenied(true)} className="secondary-button py-3 font-serif-elegant text-[10px] tracking-[0.3em] rounded-full uppercase">不同意并退出</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {privacyAccepted && analyticsConsented === null && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-md animate-in zoom-in-95 duration-500">
+          <div className="w-80 p-10 bg-[#0a0a1a] border border-white/10 rounded-3xl text-center flex flex-col gap-8 shadow-[0_15px_40px_rgba(0,0,0,0.6)]">
+            <h2 className="font-serif-elegant text-sm tracking-[0.4em] uppercase text-white">运行改进</h2>
+            <p className="text-[11px] leading-relaxed tracking-widest text-white/50 font-serif-elegant">
+              是否同意收集匿名运行数据<br/>用于分析和优化应用体验？
+            </p>
+            <div className="flex flex-col gap-4">
+              <button onClick={() => setAnalyticsConsented(true)} className="primary-button py-3 font-serif-elegant text-xs tracking-[0.4em] rounded-xl uppercase">同意收集</button>
+              <button onClick={() => setAnalyticsConsented(false)} className="secondary-button py-2.5 font-serif-elegant text-xs tracking-[0.3em] rounded-xl uppercase">不需要</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="absolute top-16 left-0 right-0 pointer-events-none flex flex-col items-center select-none z-10">
+        <h1 
+          className={`text-2xl font-serif-elegant tracking-[0.6em] mb-2 transition-colors duration-1000 cursor-pointer pointer-events-auto ${isOffline ? 'text-black/70' : 'text-white/40'} ${tutorialStep === 1 ? 'header-pulse scale-110 text-white/90 underline decoration-white/20' : 'hover:scale-105'} active:scale-95 transition-all`} 
+          onClick={openSettings}
         >
-          {isOffline ? '墨 · 染' : '星 愿 · 夜 穹'}
-        </motion.h1>
+          {isOffline ? t('墨 · 染', 'INK · WASH') : t('星 愿 · 夜 穹', 'STAR WISH · NIGHT SKY')}
+        </h1>
         <div className={`h-[1px] w-12 transition-colors duration-1000 ${isOffline ? 'bg-black/10' : 'bg-white/10'}`}></div>
       </div>
 
-      {/* 侧边工具栏 */}
-      <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-6 z-30">
-        <button 
-          onClick={() => setIsMenuOpen(true)}
-          className={`p-3 rounded-full transition-all ${isOffline ? 'bg-black/5 hover:bg-black/10 text-black/40' : 'bg-white/5 hover:bg-white/10 text-white/30'}`}
-          title="Settings"
-        >
-          <Settings size={18} />
-        </button>
-        <button 
-          onClick={() => setShowWishInput(true)}
-          className={`p-3 rounded-full transition-all ${isOffline ? 'bg-black/5 hover:bg-black/10 text-black/40' : 'bg-white/5 hover:bg-white/10 text-white/30'}`}
-          title="Write a Wish"
-        >
-          <Send size={18} />
-        </button>
-        <button 
-          onClick={clearBlessings}
-          className={`p-3 rounded-full transition-all ${isOffline ? 'bg-black/5 hover:bg-black/10 text-black/40' : 'bg-white/5 hover:bg-white/10 text-white/30'}`}
-          title="Clear Blessings"
-        >
-          <Trash2 size={18} />
-        </button>
-      </div>
-
-      {/* 烟火类型选择 (仅非水墨模式) */}
-      {!isOffline && (
-        <div className="absolute left-6 top-1/2 -translate-y-1/2 flex flex-col gap-4 z-30">
-          {(['radial', 'heart', 'ring', 'willow'] as const).map(type => (
-            <button
-              key={type}
-              onClick={() => setActiveFireworkType(type)}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all border ${
-                activeFireworkType === type 
-                ? 'bg-white/20 border-white/40 text-white' 
-                : 'bg-white/5 border-white/10 text-white/30 hover:bg-white/10'
-              }`}
-              title={type.charAt(0).toUpperCase() + type.slice(1)}
-            >
-              {type === 'radial' && <Sparkles size={16} />}
-              {type === 'heart' && <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>}
-              {type === 'ring' && <div className="w-3 h-3 rounded-full border border-current" />}
-              {type === 'willow' && <div className="w-3 h-3 flex flex-col items-center"><div className="w-1 h-1 bg-current rounded-full mb-0.5" /><div className="w-0.5 h-2 bg-current opacity-50" /></div>}
-            </button>
-          ))}
+      {tutorialStep < 2 && privacyAccepted && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-50">
+           <p className={`tutorial-text font-serif-elegant text-sm tracking-[0.4em] transition-opacity duration-1000 ${isOffline ? 'text-black' : 'text-white'}`}>
+              {tutorialStep === 0 ? t("[ 教程 ] 长按蓄力 · 松开释放", "[ TUTORIAL ] PRESS & HOLD TO CHARGE · RELEASE TO LAUNCH") : t("[ 教程 ] 轻触标题 · 打开设置", "[ TUTORIAL ] TAP TITLE · OPEN SETTINGS")}
+           </p>
         </div>
       )}
 
-      {/* 许愿输入框 */}
-      <AnimatePresence>
-        {showWishInput && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-md"
-            onClick={() => setShowWishInput(false)}
-          >
-            <form 
-              onSubmit={handleSendWish}
-              className={`w-80 p-8 rounded-3xl shadow-2xl flex flex-col gap-6 ${isOffline ? 'bg-[#f5f0e6]' : 'bg-[#0a0a1a] border border-white/10'}`}
-              onClick={e => e.stopPropagation()}
-            >
-              <h3 className={`text-sm font-serif-elegant tracking-[0.3em] uppercase text-center opacity-60 ${isOffline ? 'text-black' : 'text-white'}`}>
-                Write Your Wish
-              </h3>
-              <input 
-                autoFocus
-                type="text"
-                value={wishText}
-                onChange={e => setWishText(e.target.value)}
-                placeholder="在此输入你的心愿..."
-                className={`w-full bg-transparent border-b py-2 outline-none text-lg font-brush transition-colors ${
-                  isOffline ? 'border-black/20 text-black placeholder:text-black/20' : 'border-white/20 text-white placeholder:text-white/20'
-                }`}
-              />
-              <div className="flex justify-between items-center mt-2">
-                <button 
-                  type="button"
-                  onClick={() => setShowWishInput(false)}
-                  className={`text-[10px] tracking-[0.2em] uppercase opacity-40 hover:opacity-100 ${isOffline ? 'text-black' : 'text-white'}`}
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  className={`px-6 py-2 rounded-full text-[10px] tracking-[0.2em] uppercase transition-all ${
-                    isOffline ? 'bg-black text-white hover:bg-black/80' : 'bg-white text-black hover:bg-white/80'
-                  }`}
-                >
-                  Release
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* 极简蓄力条 */}
       <div className={`absolute bottom-24 left-1/2 -translate-x-1/2 w-40 flex flex-col items-center gap-2 z-20 transition-opacity duration-300 ${charging ? 'opacity-100' : 'opacity-0'}`}>
         <div className={`h-[1px] w-full relative overflow-hidden ${isOffline ? 'bg-black/10' : 'bg-white/10'}`}>
-          <div 
-            className={`h-full absolute left-0 transition-all duration-75 ${isOffline ? 'bg-black/60' : 'bg-white/60'}`} 
-            style={{ width: `${(chargeLevel / 3) * 100}%` }} 
-          />
+          <div className={`h-full absolute left-0 transition-all duration-75 ${isOffline ? 'bg-black/60' : 'bg-white/60'}`} style={{ width: `${(chargeLevel / 3) * 100}%` }} />
         </div>
+        <span className={`text-[8px] tracking-[0.4em] font-serif-elegant uppercase ${isOffline ? 'text-black/20' : 'text-white/20'}`}>{t('凝神', 'FOCUS')}</span>
       </div>
 
-      {/* Combo 显示 */}
       {combo > 1 && (
         <div className="absolute top-40 left-1/2 -translate-x-1/2 z-10">
           <span className={`font-serif-elegant text-xs italic tracking-widest ${isOffline ? 'text-black/30' : 'text-white/20'}`}>
-            {combo}x Harmony
+            {combo}x {t('重奏', 'Harmony')}
           </span>
         </div>
       )}
 
-      {/* 诗意寄语 */}
       {blessings.map(b => (
-        <div 
-          key={b.id}
-          className="blessing-text absolute left-1/2 pointer-events-none font-brush text-2xl whitespace-nowrap z-10"
+        <div key={b.id} className="blessing-text absolute left-1/2 pointer-events-none font-brush text-xl md:text-2xl z-10 max-w-[80vw] text-center leading-relaxed break-words"
           style={{ 
             top: `${b.y}px`, 
-            opacity: b.opacity,
-            color: isOffline ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.9)',
+            opacity: b.opacity, 
+            color: isOffline ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.9)', 
             textShadow: isOffline ? 'none' : '0 0 20px rgba(255,255,255,0.6), 0 0 40px rgba(255,255,255,0.2)',
             transform: `translate(-50%, 0) rotate(${b.rotation || 0}deg)`
-          }}
-        >
+          }}>
           {b.text}
         </div>
       ))}
 
-      {/* 底部状态 - 双击切换模式 */}
       <div 
-        className={`absolute bottom-8 right-10 text-[9px] tracking-[0.3em] font-serif-elegant pointer-events-auto cursor-pointer z-10 uppercase transition-opacity hover:opacity-100 opacity-60 ${isOffline ? 'text-black/40' : 'text-white/30'}`}
-        onDoubleClick={() => setIsOffline(!isOffline)}
-        title="Double click to switch mode"
+        className={`absolute bottom-8 right-10 text-xs tracking-[0.4em] font-serif-elegant pointer-events-auto cursor-pointer z-10 uppercase transition-all hover:opacity-100 hover:scale-105 active:scale-95 ${isOffline ? 'text-black/50' : 'text-white/60'}`}
+        onDoubleClick={(e) => { e.stopPropagation(); setIsOffline(!isOffline); }}
       >
-        {isOffline ? 'Offline / Ink Mode' : 'Gilding The Night Sky'}
+        {isOffline ? t('纸上墨染 / INK', 'INK MODE / INK') : t('璀璨星穹 / SKY', 'NIGHT SKY / SKY')}
       </div>
 
-      {/* 设置菜单 */}
       {isMenuOpen && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
-          onClick={() => setIsMenuOpen(false)}
-        >
-          <div 
-            className={`w-72 p-8 rounded-2xl shadow-2xl flex flex-col gap-8 transition-colors duration-1000 ${isOffline ? 'bg-[#f5f0e6]/95 text-black' : 'bg-[#0a0a1a]/90 text-white border border-white/10'}`}
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${isMenuClosing ? 'opacity-0' : 'opacity-100'}`} onClick={closeSettings}>
+          <div className={`w-72 p-6 rounded-2xl shadow-2xl flex flex-col gap-4 transition-all duration-300 ${isMenuClosing ? 'scale-95 translate-y-4 opacity-0' : 'animate-settings-in'} ${isOffline ? 'bg-[#f5f0e6]/95' : 'bg-[#0a0a1a]/90 border border-white/10'}`} onClick={(e) => e.stopPropagation()}>
             <div className="text-center">
-              <h2 className="text-sm font-serif-elegant tracking-[0.4em] opacity-60 uppercase mb-4">Settings</h2>
+              <h2 className="text-sm font-serif-elegant tracking-[0.4em] opacity-60 uppercase mb-2">{t('设 置', 'SETTINGS')}</h2>
               <div className={`h-[1px] w-8 mx-auto ${isOffline ? 'bg-black/20' : 'bg-white/20'}`}></div>
             </div>
-
-            {/* 音量控制 */}
-            <div className="flex flex-col gap-4">
+            
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <span className="text-[10px] tracking-[0.3em] uppercase opacity-50">{t('语言', 'LANGUAGE')}</span>
+              <div className="flex gap-2">
+                <button onClick={() => setLanguage('zh')} className={`text-[10px] tracking-widest px-2 py-1 rounded transition-colors ${language === 'zh' ? 'bg-white/20 text-white' : 'opacity-50 hover:opacity-100'}`}>中文</button>
+                <button onClick={() => setLanguage('en')} className={`text-[10px] tracking-widest px-2 py-1 rounded transition-colors ${language === 'en' ? 'bg-white/20 text-white' : 'opacity-50 hover:opacity-100'}`}>EN</button>
+              </div>
+            </div>
+            
+            <div className="flex flex-col gap-2">
               <label className="text-[10px] tracking-[0.3em] uppercase opacity-50 flex justify-between">
-                <span>Volume</span>
-                <span>{Math.round(volume * 100)}%</span>
+                <span>{t('音量', 'VOLUME')}</span><span>{Math.round(volume * 100)}%</span>
               </label>
-              <input 
-                type="range" 
-                min="0" 
-                max="1" 
-                step="0.01" 
-                value={volume} 
-                onChange={handleVolumeChange}
-                className={`w-full h-[2px] appearance-none cursor-pointer outline-none transition-colors ${isOffline ? 'bg-black/10 accent-black/60' : 'bg-white/10 accent-white/60'}`}
-              />
+              <input type="range" min="0" max="1" step="0.01" value={volume} onChange={(e) => setVolume(parseFloat(e.target.value))}
+                className={`w-full h-[2px] appearance-none cursor-pointer outline-none transition-colors ${isOffline ? 'bg-black/10 accent-black/60' : 'bg-white/10 accent-white/60'}`} />
             </div>
 
-            {/* 模式切换 */}
-            <div className="flex flex-col gap-4">
-              <label className="text-[10px] tracking-[0.3em] uppercase opacity-50">Mode</label>
-              <button 
-                onClick={() => setIsOffline(!isOffline)}
-                className={`w-full py-3 rounded-xl border flex items-center justify-center gap-3 transition-all ${
-                  isOffline 
-                  ? 'bg-black text-white border-black' 
-                  : 'bg-white/5 text-white border-white/10 hover:bg-white/10'
-                }`}
-              >
-                {isOffline ? <Sun size={14} /> : <Moon size={14} />}
-                <span className="text-[10px] tracking-[0.2em] uppercase">
-                  {isOffline ? 'Switch to Night' : 'Switch to Ink'}
-                </span>
-              </button>
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] tracking-[0.3em] uppercase opacity-50">{t('绽放样式', 'STYLE')}</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: 'random', name: t('随机', 'Random') },
+                  { id: 'chrysanthemum', name: t('球形', 'Spherical') },
+                  { id: 'willow', name: t('垂落', 'Drooping') },
+                  { id: 'sparkle', name: t('闪烁', 'Blinking') }
+                ].map(style => (
+                  <button 
+                    key={style.id}
+                    onClick={() => setFireworkStyle(style.id)}
+                    className={`style-btn py-2 text-[10px] tracking-[0.2em] rounded opacity-60 hover:opacity-100 font-serif-elegant ${fireworkStyle === style.id ? 'active' : ''}`}
+                  >
+                    {style.name}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <button 
-              onClick={() => setIsMenuOpen(false)}
-              className="mt-4 text-[10px] tracking-[0.3em] opacity-30 hover:opacity-100 transition-opacity uppercase"
-            >
-              Close
-            </button>
+            <div className="flex flex-col gap-3 border-t border-white/5 pt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] tracking-[0.3em] uppercase opacity-50">{t('星辰可见', 'SHOW STARS')}</span>
+                <label className="toggle-switch">
+                  <input type="checkbox" checked={showStars} onChange={(e) => setShowStars(e.target.checked)} />
+                  <span className="slider"></span>
+                </label>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] tracking-[0.3em] uppercase opacity-50">{t('极光流动', 'SHOW AURORA')}</span>
+                <label className="toggle-switch">
+                  <input type="checkbox" checked={showAurora} onChange={(e) => setShowAurora(e.target.checked)} />
+                  <span className="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 border-t border-white/5 pt-4">
+              <button onClick={resetTutorial} className="text-[10px] tracking-[0.3em] opacity-30 hover:opacity-100 transition-opacity uppercase border-b border-transparent hover:border-current pb-1 w-fit mx-auto">{t('重新打开教程', 'REOPEN TUTORIAL')}</button>
+              <button onClick={closeSettings} className="mt-2 text-[10px] tracking-[0.3em] opacity-30 hover:opacity-100 transition-opacity uppercase text-center">{t('返回', 'BACK')}</button>
+            </div>
           </div>
         </div>
       )}

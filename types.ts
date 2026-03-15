@@ -39,4 +39,5 @@ export interface Blessing {
   opacity: number;
   y: number;
   id: number;
+  rotation?: number;
 }
