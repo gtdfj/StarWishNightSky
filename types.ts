@@ -17,7 +17,7 @@ export interface Particle {
   gravity: number;
   trail: Point[];
   shape?: 'star' | 'circle' | 'heart';
-  behavior?: 'normal' | 'spark' | 'flash';
+  behavior?: 'normal' | 'spark' | 'flash' | 'sparkle';
   wobbleSpeed?: number;
   wobbleTheta?: number;
 }

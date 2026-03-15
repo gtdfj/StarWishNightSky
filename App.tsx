@@ -106,7 +106,13 @@ const App: React.FC = () => {
     }
 
     const quote = QUOTES[Math.floor(Math.random() * QUOTES.length)];
-    setBlessings(prev => [...prev.slice(-2), { text: quote, opacity: 1, y: y - 80, id: Date.now() }]);
+    setBlessings(prev => [...prev.slice(-2), { 
+      text: quote, 
+      opacity: 1, 
+      y: y - 80, 
+      id: Date.now(),
+      rotation: (Math.random() - 0.5) * 10
+    }]);
     audioService.playPop(power);
   }, [isOffline]);
 
@@ -346,12 +352,13 @@ const App: React.FC = () => {
       {blessings.map(b => (
         <div 
           key={b.id}
-          className="blessing-text absolute left-1/2 pointer-events-none font-serif-elegant text-xl whitespace-nowrap z-10"
+          className="blessing-text absolute left-1/2 pointer-events-none font-brush text-2xl whitespace-nowrap z-10"
           style={{ 
             top: `${b.y}px`, 
             opacity: b.opacity,
-            color: isOffline ? '#000' : '#fff',
-            textShadow: isOffline ? 'none' : '0 0 15px rgba(255,255,255,0.4)'
+            color: isOffline ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.9)',
+            textShadow: isOffline ? 'none' : '0 0 20px rgba(255,255,255,0.6), 0 0 40px rgba(255,255,255,0.2)',
+            transform: `translate(-50%, 0) rotate(${b.rotation || 0}deg)`
           }}
         >
           {b.text}
